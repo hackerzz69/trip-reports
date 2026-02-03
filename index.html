@@ -7,7 +7,7 @@
 
 <style>
 :root {
-  --bg: #0b1220;
+  --bg: #050b17;
   --panel: #0f172a;
   --panel-soft: #111c33;
   --border: #1e293b;
@@ -20,19 +20,19 @@
 
 body {
   margin: 0;
+  padding: 16px;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   background: linear-gradient(180deg, #050b17, #0b1220);
   color: var(--text);
-  padding: 16px;
 }
 
 /* ======================
-   HEADER
+   HEADINGS
    ====================== */
 
 h1 {
   font-size: 1.6rem;
-  margin-bottom: 12px;
+  margin: 0 0 12px 0;
 }
 
 h2 {
@@ -47,13 +47,13 @@ h2 {
 .controls {
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 10;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   background: var(--bg);
-  padding: 10px 0 14px;
-  margin-bottom: 14px;
+  padding: 12px 0 16px;
+  margin-bottom: 16px;
 }
 
 select {
@@ -62,7 +62,7 @@ select {
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 0.95rem;
 }
 
@@ -70,13 +70,18 @@ select {
    CARDS
    ====================== */
 
+.dashboard {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
 .card {
   background: linear-gradient(180deg, var(--panel), var(--panel-soft));
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 14px;
-  margin-bottom: 18px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
 }
 
 /* ======================
@@ -98,7 +103,6 @@ table {
 th, td {
   padding: 10px 8px;
   border-bottom: 1px solid var(--border);
-  text-align: left;
   font-size: 0.9rem;
 }
 
@@ -106,10 +110,11 @@ th {
   color: var(--muted);
   font-weight: 600;
   background: transparent;
+  text-align: left;
 }
 
 tr:hover {
-  background: rgba(56,189,248,.05);
+  background: rgba(56,189,248,.06);
 }
 
 .route {
@@ -124,7 +129,7 @@ tr:hover {
 }
 
 /* ======================
-   DESKTOP ENHANCEMENTS
+   DESKTOP LAYOUT
    ====================== */
 
 @media (min-width: 900px) {
@@ -140,19 +145,13 @@ tr:hover {
     grid-template-columns: 200px 200px;
     justify-content: flex-start;
     background: none;
-    padding: 0;
     position: static;
+    padding: 0;
   }
 
   .dashboard {
-    display: grid;
-    grid-template-columns: 320px 1fr;
-    gap: 20px;
+    grid-template-columns: 340px 1fr;
     align-items: start;
-  }
-
-  .card {
-    margin-bottom: 0;
   }
 
   table {
@@ -214,11 +213,158 @@ tr:hover {
 
 </div>
 
-<!-- ======================
-     SCRIPT (UNCHANGED)
-     ====================== -->
 <script>
-/* your existing JS goes here unchanged */
+/* ==============================
+   CONFIG
+   ============================== */
+
+const CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2mGE3YfbLHrHeVtSAW5sq7WdEGTbwGhefLtZbwAqcfT-6kZsQmIy2954KQm9yT1mg93EKLpjU8jPA/pub?output=csv";
+
+let trips = [];
+
+/* ==============================
+   CSV LOAD + PARSE
+   ============================== */
+
+async function loadCSV() {
+  const res = await fetch(CSV_URL);
+  let text = await res.text();
+
+  text = text.replace(/^\uFEFF/, "");
+
+  const rows = text
+    .split("\n")
+    .map(r =>
+      r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
+       .map(v => v.replace(/^"|"$/g, "").trim())
+    )
+    .filter(r => r.some(c => c));
+
+  const headerIndex = rows.findIndex(r => r[0] === "Date");
+  if (headerIndex === -1) return;
+
+  const headers = rows[headerIndex].map(h => h.toLowerCase());
+  const dataRows = rows.slice(headerIndex + 1);
+
+  trips = dataRows.map(r => {
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = r[i] || "");
+    return obj;
+  });
+
+  initFilters();
+  render();
+}
+
+/* ==============================
+   DATE HELPERS
+   ============================== */
+
+function parseDate(str) {
+  if (!str) return NaN;
+  const [m, d, y] = str.split("/");
+  return new Date(`20${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`);
+}
+
+function getQuarter(date) {
+  const m = date.getMonth() + 1;
+  if (m <= 3) return "Q1";
+  if (m <= 6) return "Q2";
+  if (m <= 9) return "Q3";
+  return "Q4";
+}
+
+/* ==============================
+   FILTERS
+   ============================== */
+
+function initFilters() {
+  const yearSelect = document.getElementById("yearSelect");
+
+  const years = [...new Set(
+    trips
+      .map(t => parseDate(t.date))
+      .filter(d => !isNaN(d))
+      .map(d => d.getFullYear())
+  )].sort();
+
+  yearSelect.innerHTML =
+    `<option value="ALL">All Years</option>` +
+    years.map(y => `<option value="${y}">${y}</option>`).join("");
+
+  yearSelect.onchange = render;
+  document.getElementById("quarterSelect").onchange = render;
+}
+
+/* ==============================
+   RENDER
+   ============================== */
+
+function render() {
+  const year = yearSelect.value;
+  const quarter = quarterSelect.value;
+
+  const filtered = trips.filter(t => {
+    const d = parseDate(t.date);
+    if (isNaN(d)) return false;
+    if (year !== "ALL" && d.getFullYear().toString() !== year) return false;
+    if (quarter !== "ALL" && getQuarter(d) !== quarter) return false;
+    return true;
+  });
+
+  renderTrips(filtered);
+  renderIFTA(filtered);
+}
+
+function renderTrips(list) {
+  const tbody = document.querySelector("#tripTable tbody");
+  tbody.innerHTML = "";
+
+  list.forEach(t => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${t.date}</td>
+        <td>${t["origin city/state"]}</td>
+        <td>${t["destination city/state"]}</td>
+        <td class="route">${t.route}</td>
+        <td class="number">${Number(t.mileage).toFixed(1)}</td>
+      </tr>
+    `;
+  });
+}
+
+function renderIFTA(list) {
+  const totals = {};
+
+  list.forEach(t => {
+    const miles = Number(t.mileage);
+    if (!t.route || isNaN(miles)) return;
+
+    const states = t.route.split(",").map(s => s.trim());
+    const per = miles / states.length;
+
+    states.forEach(s => {
+      totals[s] = (totals[s] || 0) + per;
+    });
+  });
+
+  const tbody = document.querySelector("#iftaTable tbody");
+  tbody.innerHTML = "";
+
+  Object.entries(totals)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([state, miles]) => {
+      tbody.innerHTML += `
+        <tr>
+          <td>${state}</td>
+          <td class="number">${miles.toFixed(1)}</td>
+        </tr>
+      `;
+    });
+}
+
+loadCSV();
 </script>
 
 </body>
