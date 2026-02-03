@@ -1,73 +1,67 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Daily Trip Report / IFTA Summary</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="UTF-8">
+<title>Daily Trip Report / IFTA Summary</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <style>
-    body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: #0f172a;
-      color: #e5e7eb;
-      padding: 20px;
-    }
+<style>
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #0f172a;
+  color: #e5e7eb;
+  padding: 20px;
+}
 
-    h1, h2 { margin-bottom: 12px; }
+h1, h2 { margin-bottom: 12px; }
 
-    .controls {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
+.controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
 
-    select {
-      padding: 6px 10px;
-      background: #020617;
-      color: #e5e7eb;
-      border: 1px solid #334155;
-      border-radius: 4px;
-    }
+select {
+  padding: 6px 10px;
+  background: #020617;
+  color: #e5e7eb;
+  border: 1px solid #334155;
+  border-radius: 4px;
+}
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 30px;
-    }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 30px;
+}
 
-    th, td {
-      padding: 8px 10px;
-      border-bottom: 1px solid #334155;
-    }
+th, td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #334155;
+}
 
-    th {
-      background: #020617;
-      position: sticky;
-      top: 0;
-    }
+th {
+  background: #020617;
+  position: sticky;
+  top: 0;
+}
 
-    tr:hover { background: #020617; }
+tr:hover { background: #020617; }
 
-    .route {
-      color: #38bdf8;
-      font-weight: 600;
-    }
+.route { color: #38bdf8; font-weight: 600; }
+.number { text-align: right; font-variant-numeric: tabular-nums; }
 
-    .number {
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .card {
-      background: #020617;
-      border: 1px solid #334155;
-      border-radius: 6px;
-      padding: 16px;
-      margin-bottom: 24px;
-    }
-  </style>
+.card {
+  background: #020617;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+</style>
 </head>
+
 <body>
 
 <h1>🚚 Daily Trip Report</h1>
@@ -113,34 +107,45 @@
 </div>
 
 <script>
+/* ==============================
+   CONFIG
+   ============================== */
+
 const CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2mGE3YfbLHrHeVtSAW5sq7WdEGTbwGhefLtZbwAqcfT-6kZsQmIy2954KQm9yT1mg93EKLpjU8jPA/pub?output=csv";
 
-let allTrips = [];
+let trips = [];
+
+/* ==============================
+   CSV LOAD + PARSE
+   ============================== */
 
 async function loadCSV() {
   const res = await fetch(CSV_URL);
-  const text = await res.text();
+  let text = await res.text();
+
+  // Remove BOM if present
+  text = text.replace(/^\uFEFF/, "");
 
   const rows = text
     .split("\n")
     .map(r =>
       r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
-       .map(v => v.replace(/^"|"$/g, "").replace(/\r/g, "").trim())
+       .map(v => v.replace(/^"|"$/g, "").trim())
     )
     .filter(r => r.some(c => c));
 
-  // Find header row
+  // Find header row (Date, Origin City/State, ...)
   const headerIndex = rows.findIndex(r => r[0] === "Date");
   if (headerIndex === -1) {
     console.error("Header row not found");
     return;
   }
 
-  const headers = rows[headerIndex].map(h => h.trim());
+  const headers = rows[headerIndex].map(h => h.toLowerCase());
   const dataRows = rows.slice(headerIndex + 1);
 
-  allTrips = dataRows.map(r => {
+  trips = dataRows.map(r => {
     const obj = {};
     headers.forEach((h, i) => obj[h] = r[i] || "");
     return obj;
@@ -150,17 +155,34 @@ async function loadCSV() {
   render();
 }
 
+/* ==============================
+   DATE HELPERS
+   ============================== */
+
 function parseDate(str) {
+  if (!str) return NaN;
   const [m, d, y] = str.split("/");
   return new Date(`20${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`);
 }
+
+function getQuarter(date) {
+  const m = date.getMonth() + 1;
+  if (m <= 3) return "Q1";
+  if (m <= 6) return "Q2";
+  if (m <= 9) return "Q3";
+  return "Q4";
+}
+
+/* ==============================
+   FILTERS
+   ============================== */
 
 function initFilters() {
   const yearSelect = document.getElementById("yearSelect");
 
   const years = [...new Set(
-    allTrips
-      .map(t => parseDate(t.Date))
+    trips
+      .map(t => parseDate(t.date))
       .filter(d => !isNaN(d))
       .map(d => d.getFullYear())
   )].sort();
@@ -173,20 +195,16 @@ function initFilters() {
   document.getElementById("quarterSelect").onchange = render;
 }
 
-function getQuarter(date) {
-  const m = date.getMonth() + 1;
-  if (m <= 3) return "Q1";
-  if (m <= 6) return "Q2";
-  if (m <= 9) return "Q3";
-  return "Q4";
-}
+/* ==============================
+   RENDER
+   ============================== */
 
 function render() {
-  const year = document.getElementById("yearSelect").value;
-  const quarter = document.getElementById("quarterSelect").value;
+  const year = yearSelect.value;
+  const quarter = quarterSelect.value;
 
-  const filtered = allTrips.filter(t => {
-    const d = parseDate(t.Date);
+  const filtered = trips.filter(t => {
+    const d = parseDate(t.date);
     if (isNaN(d)) return false;
     if (year !== "ALL" && d.getFullYear().toString() !== year) return false;
     if (quarter !== "ALL" && getQuarter(d) !== quarter) return false;
@@ -197,33 +215,31 @@ function render() {
   renderIFTA(filtered);
 }
 
-function renderTrips(trips) {
+function renderTrips(list) {
   const tbody = document.querySelector("#tripTable tbody");
   tbody.innerHTML = "";
 
-  trips.forEach(t => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${t.Date}</td>
-      <td>${t["Origin City/State"]}</td>
-      <td>${t["Destination City/State"]}</td>
-      <td class="route">${t.Route}</td>
-      <td class="number">${Number(t.Mileage).toFixed(1)}</td>
+  list.forEach(t => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${t.date}</td>
+        <td>${t["origin city/state"]}</td>
+        <td>${t["destination city/state"]}</td>
+        <td class="route">${t.route}</td>
+        <td class="number">${Number(t.mileage).toFixed(1)}</td>
+      </tr>
     `;
-    tbody.appendChild(tr);
   });
 }
 
-function renderIFTA(trips) {
+function renderIFTA(list) {
   const totals = {};
 
-  trips.forEach(t => {
-    if (!t.Route || !t.Mileage) return;
+  list.forEach(t => {
+    const miles = Number(t.mileage);
+    if (!t.route || isNaN(miles)) return;
 
-    const states = t.Route.split(",").map(s => s.trim());
-    const miles = Number(t.Mileage);
-    if (!states.length || isNaN(miles)) return;
-
+    const states = t.route.split(",").map(s => s.trim());
     const per = miles / states.length;
 
     states.forEach(s => {
@@ -237,14 +253,18 @@ function renderIFTA(trips) {
   Object.entries(totals)
     .sort((a, b) => b[1] - a[1])
     .forEach(([state, miles]) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${state}</td>
-        <td class="number">${miles.toFixed(1)}</td>
+      tbody.innerHTML += `
+        <tr>
+          <td>${state}</td>
+          <td class="number">${miles.toFixed(1)}</td>
+        </tr>
       `;
-      tbody.appendChild(tr);
     });
 }
+
+/* ==============================
+   INIT
+   ============================== */
 
 loadCSV();
 </script>
