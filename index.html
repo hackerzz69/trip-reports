@@ -119,7 +119,6 @@
 </div>
 
 <script>
-/* 🔗 YOUR PUBLISHED CSV */
 const CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2mGE3YfbLHrHeVtSAW5sq7WdEGTbwGhefLtZbwAqcfT-6kZsQmIy2954KQm9yT1mg93EKLpjU8jPA/pub?output=csv";
 
@@ -129,14 +128,25 @@ async function loadCSV() {
   const res = await fetch(CSV_URL);
   const text = await res.text();
 
-  const rows = text.trim().split("\n").map(r =>
-    r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
-      .map(v => v.replace(/^"|"$/g, "").trim())
-  );
+  const rows = text
+    .split("\n")
+    .map(r =>
+      r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
+       .map(v => v.replace(/^"|"$/g, "").trim())
+    )
+    .filter(r => r.length && r.some(c => c));
 
-  const headers = rows.shift();
+  // 🔑 Find the REAL header row
+  const headerIndex = rows.findIndex(r => r[0] === "Date");
+  if (headerIndex === -1) {
+    console.error("Header row not found");
+    return;
+  }
 
-  allTrips = rows.map(r => {
+  const headers = rows[headerIndex];
+  const dataRows = rows.slice(headerIndex + 1);
+
+  allTrips = dataRows.map(r => {
     const obj = {};
     headers.forEach((h, i) => obj[h] = r[i] || "");
     return obj;
@@ -148,9 +158,16 @@ async function loadCSV() {
 
 function initFilters() {
   const yearSelect = document.getElementById("yearSelect");
-  const years = [...new Set(allTrips.map(t => new Date(t.Date).getFullYear()))].sort();
 
-  yearSelect.innerHTML = `<option value="ALL">All Years</option>` +
+  const years = [...new Set(
+    allTrips
+      .map(t => new Date(t.Date))
+      .filter(d => !isNaN(d))
+      .map(d => d.getFullYear())
+  )].sort();
+
+  yearSelect.innerHTML =
+    `<option value="ALL">All Years</option>` +
     years.map(y => `<option value="${y}">${y}</option>`).join("");
 
   yearSelect.onchange = render;
@@ -171,6 +188,7 @@ function render() {
 
   const filtered = allTrips.filter(t => {
     const d = new Date(t.Date);
+    if (isNaN(d)) return false;
     if (year !== "ALL" && d.getFullYear().toString() !== year) return false;
     if (quarter !== "ALL" && getQuarter(d) !== quarter) return false;
     return true;
@@ -205,6 +223,8 @@ function renderIFTA(trips) {
 
     const states = t.Route.split(",").map(s => s.trim());
     const miles = Number(t.Mileage);
+    if (!states.length || isNaN(miles)) return;
+
     const per = miles / states.length;
 
     states.forEach(s => {
@@ -229,6 +249,7 @@ function renderIFTA(trips) {
 
 loadCSV();
 </script>
+
 
 </body>
 </html>
